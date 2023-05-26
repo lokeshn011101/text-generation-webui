@@ -96,53 +96,44 @@ def get_download_links_from_huggingface(model, branch, text_only=False):
     has_ggml = False
     has_safetensors = False
     is_lora = False
-    while True:
-        url = f"{base}{page}" + (f"?cursor={cursor.decode()}" if cursor else "")
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        content = r.content
+    content = requests.get(f"https://huggingface.co/api/models/decapoda-research/llama-7b-hf/tree/main").content
 
-        dict = json.loads(content)
-        if len(dict) == 0:
-            break
+    dictt = json.loads(content)
 
-        for i in range(len(dict)):
-            fname = dict[i]['path']
-            if not is_lora and fname.endswith(('adapter_config.json', 'adapter_model.bin')):
-                is_lora = True
+    for i in range(len(dictt)):
+        fname = dictt[i]['path']
+        if not is_lora and fname.endswith(('adapter_config.json', 'adapter_model.bin')):
+            is_lora = True
 
-            is_pytorch = re.match("(pytorch|adapter)_model.*\.bin", fname)
-            is_safetensors = re.match(".*\.safetensors", fname)
-            is_pt = re.match(".*\.pt", fname)
-            is_ggml = re.match(".*ggml.*\.bin", fname)
-            is_tokenizer = re.match("(tokenizer|ice).*\.model", fname)
-            is_text = re.match(".*\.(txt|json|py|md)", fname) or is_tokenizer
+        is_pytorch = re.match("(pytorch|adapter)_model.*\.bin", fname)
+        is_safetensors = re.match(".*\.safetensors", fname)
+        is_pt = re.match(".*\.pt", fname)
+        is_ggml = re.match(".*ggml.*\.bin", fname)
+        is_tokenizer = re.match("(tokenizer|ice).*\.model", fname)
+        is_text = re.match(".*\.(txt|json|py|md)", fname) or is_tokenizer
 
-            if any((is_pytorch, is_safetensors, is_pt, is_ggml, is_tokenizer, is_text)):
-                if 'lfs' in dict[i]:
-                    sha256.append([fname, dict[i]['lfs']['oid']])
-                if is_text:
-                    links.append(f"https://huggingface.co/{model}/resolve/{branch}/{fname}")
-                    classifications.append('text')
-                    continue
-                if not text_only:
-                    links.append(f"https://huggingface.co/{model}/resolve/{branch}/{fname}")
-                    if is_safetensors:
-                        has_safetensors = True
-                        classifications.append('safetensors')
-                    elif is_pytorch:
-                        has_pytorch = True
-                        classifications.append('pytorch')
-                    elif is_pt:
-                        has_pt = True
-                        classifications.append('pt')
-                    elif is_ggml:
-                        has_ggml = True
-                        classifications.append('ggml')
+        if any((is_pytorch, is_safetensors, is_pt, is_ggml, is_tokenizer, is_text)):
+            if 'lfs' in dict[i]:
+                sha256.append([fname, dict[i]['lfs']['oid']])
+            if is_text:
+                links.append(f"https://huggingface.co/{model}/resolve/{branch}/{fname}")
+                classifications.append('text')
+                continue
+            if not text_only:
+                links.append(f"https://huggingface.co/{model}/resolve/{branch}/{fname}")
+                if is_safetensors:
+                    has_safetensors = True
+                    classifications.append('safetensors')
+                elif is_pytorch:
+                    has_pytorch = True
+                    classifications.append('pytorch')
+                elif is_pt:
+                    has_pt = True
+                    classifications.append('pt')
+                elif is_ggml:
+                    has_ggml = True
+                    classifications.append('ggml')
 
-        cursor = base64.b64encode(f'{{"file_name":"{dict[-1]["path"]}"}}'.encode()) + b':50'
-        cursor = base64.b64encode(cursor)
-        cursor = cursor.replace(b'=', b'%3D')
 
     # If both pytorch and safetensors are available, download safetensors only
     if (has_pytorch or has_pt) and has_safetensors:
